@@ -11,6 +11,7 @@ namespace ShinyTools
 	{
 		
 		/* Grab an archive's header. */
+		[System.Obsolete("Legacy; Use GetFromArchive instead.")]
 		public static byte[] GetArchiveHeader(string path)
 		{
 			//We create a buffer to hold the relevant decompressed data.
@@ -29,6 +30,52 @@ namespace ShinyTools
 			{
 				//If the file isn't gzipped, like in early Shiny games, or has already been extracted we just read the file.
 				Array.Copy(File.ReadAllBytes(path), _buffer, 0x40);
+			}
+			return _buffer;
+		}
+		/* Grab the first sprite's header. */
+		[System.Obsolete("Legacy; Use GetFromArchive instead.")]
+		public static byte[] GetSpriteHeader(string path)
+		{
+			//We create a buffer to hold the relevant decompressed data.
+			byte[] _buffer = new byte[0x10];
+			try
+			{
+				//We unpack the gzip and copy it to a more friendly stream.
+				MemoryStream _compressed = new MemoryStream(File.ReadAllBytes(path));
+				MemoryStream _decompressed = new MemoryStream();
+				GZip.Decompress(_compressed, _decompressed, true);
+				Array.Copy(_decompressed.ToArray(), 0x40, _buffer, 0, 0x10);
+				_compressed.Close();
+				_decompressed.Close();
+			}
+			catch
+			{
+				//If the file isn't gzipped, like in early Shiny games, or has already been extracted we just read the file.
+				Array.Copy(File.ReadAllBytes(path), 0x40, _buffer, 0, 0x10);
+			}
+			return _buffer;
+		}
+		/* Grab a range of bytes from an archive. (intended for archive and sprite headers or single sprite data) */
+		public static byte[] GetFromArchive(string path, int index, int length)
+		{
+
+			//We create a buffer to hold the relevant decompressed data.
+			byte[] _buffer = new byte[length];
+			try
+			{
+				//We unpack the gzip and copy it to a more friendly stream.
+				MemoryStream _compressed = new MemoryStream(File.ReadAllBytes(path));
+				MemoryStream _decompressed = new MemoryStream();
+				GZip.Decompress(_compressed, _decompressed, true);
+				Array.Copy(_decompressed.ToArray(), index, _buffer, 0, length);
+				_compressed.Close();
+				_decompressed.Close();
+			}
+			catch
+			{
+				//If the file isn't gzipped, like in early Shiny games, or has already been extracted we just read the file.
+				Array.Copy(File.ReadAllBytes(path), index, _buffer, 0, length);
 			}
 			return _buffer;
 		}

@@ -42,7 +42,7 @@ namespace EversionPacker
             ShinyTools.Helpers.Console.WriteColor("I", ConsoleColor.Magenta);
             ShinyTools.Helpers.Console.WriteColor("O", ConsoleColor.Red);
             ShinyTools.Helpers.Console.WriteColor("N", ConsoleColor.DarkRed);
-            Console.Write(" Packer v0.6.0 by ");
+            Console.Write(" Packer v0.6.2 by ");
                 ShinyTools.Helpers.Console.WriteColor("[hy]\n", ConsoleColor.Magenta);
                 Console.Write("with research provided by ");
                 ShinyTools.Helpers.Console.WriteColor("shrubbyfrog\n\n", ConsoleColor.Green);
@@ -108,6 +108,7 @@ namespace EversionPacker
             ".gif"
         };
         static byte[] ArchiveHeader = new byte[0x40];
+        static byte[] SpriteHeader = new byte[0x10];
         static void Func(string _archive, string _graphics, string _TransparentColour)
 		{
             var InvalidChars = Path.GetInvalidPathChars();
@@ -131,6 +132,7 @@ namespace EversionPacker
                 try { return int.Parse(str); }
                 catch { return str; }
             };
+            Console.WriteLine("Grabbing sprites...");
             files = files.OrderBy(
                 str => Regex.Split(str.Replace(" ", ""), "([0-9]+)").Select(convert),
                 new ShinyTools.Helpers.Comparers.EnumerableComparer<object>()).ToList();
@@ -143,13 +145,16 @@ namespace EversionPacker
 				{
                     _count++;
                     _image = new Bitmap(item);
+                    byte[] sx = new byte[0x4], sy = new byte[0x4], cx = new byte[0x4], cy = new byte[0x4];
                     //If this is the first image we're working with, we initialise header junk.
                     if (_count == 1)
 					{
                         if (!string.IsNullOrEmpty(_archive) && CheckArchive(_archive))
 						{
-                            //byte[] sw,sh,soffx,soffy,coffx,coffy,sc,magic,transparent;
-                            byte[] sw = new byte[0x2], sh = new byte[0x2], soffx = new byte[0x2], soffy = new byte[0x2], coffx = new byte[0x2], coffy = new byte[0x2], sc = new byte[0x2], magic = new byte[0x2], render = new byte[0x2];
+							/* Get the archive header */
+							#region Grab archive header
+							//byte[] sw,sh,soffx,soffy,coffx,coffy,sc,magic,transparent;
+							byte[] sw = new byte[0x2], sh = new byte[0x2], soffx = new byte[0x2], soffy = new byte[0x2], coffx = new byte[0x2], coffy = new byte[0x2], sc = new byte[0x2], magic = new byte[0x2], render = new byte[0x2];
                             byte[] transparent = new byte[0x4];
                             //Copy from the header to these intermediary variables.
                             Array.Copy(ArchiveHeader, 0x4, sw, 0, 0x2);
@@ -188,7 +193,21 @@ namespace EversionPacker
                             _OutCha.HeadUn12t13 = BitConverter.ToInt16(magic, 0);
                             _OutCha.HeadUn20t21 = BitConverter.ToInt16(render, 0);
                             _OutCha.SpriteTransparentColour = BitConverter.ToInt32(transparent, 0);
-						}
+                            #endregion
+                            #region Grab sprite header
+                            Array.Copy(SpriteHeader, 0, sx, 0, 0x4);
+                            Array.Copy(SpriteHeader, 0x4, sy, 0, 0x4);
+                            Array.Copy(SpriteHeader, 0x8, cx, 0, 0x4);
+                            Array.Copy(SpriteHeader, 0xC, cy, 0, 0x4);
+							if (!BitConverter.IsLittleEndian)
+							{
+								sx = ShinyTools.Helpers.Parsers.SwapEndianness(sx, 0x4);
+								sy = ShinyTools.Helpers.Parsers.SwapEndianness(sy, 0x4);
+								cx = ShinyTools.Helpers.Parsers.SwapEndianness(cx, 0x4);
+								cy = ShinyTools.Helpers.Parsers.SwapEndianness(cy, 0x4);
+							}
+                            #endregion
+                        }
 						else
 						{
                             //set cha header to this image's size
@@ -206,14 +225,19 @@ namespace EversionPacker
                                 var p = _image.GetPixel(0, 0);
                                 _OutCha.SpriteTransparentColour = (p.R << 16) + (p.G << 8) + (p.B << 0);
 							}
+                            //set sprite header info to fallback
+                            sx = BitConverter.GetBytes(_OutCha.SpriteXOffset);
+                            sy = BitConverter.GetBytes(_OutCha.SpriteYOffset);
+                            cx = BitConverter.GetBytes(_OutCha.SpriteXOffset);
+                            cy = BitConverter.GetBytes(_OutCha.SpriteYOffset);
 						}
 					}
                     //Now we convert the image into sprite data.
                     var _sprite = new ChaSprite();
-                    _sprite.SpriteVisXOffset = _OutCha.SpriteXOffset;
-                    _sprite.SpriteVisXOffset = _OutCha.SpriteYOffset;
-                    _sprite.ColliderXOffset = _OutCha.ColliderWidth;
-                    _sprite.ColliderYOffset = _OutCha.ColliderHeight;
+                    _sprite.SpriteVisXOffset = BitConverter.ToInt32(sx, 0);
+                    _sprite.SpriteVisYOffset = BitConverter.ToInt32(sy, 0);
+                    _sprite.ColliderXOffset = BitConverter.ToInt32(cx, 0);
+                    _sprite.ColliderYOffset = BitConverter.ToInt32(cy, 0);
                     _sprite.SetSpriteHeader();
                     _sprite.SpriteData = ChaSprite.ConvertImageToSpriteData(_image, _TransparentColour);
                     Sprites.Add(_sprite);
@@ -255,7 +279,7 @@ namespace EversionPacker
         /* Prepare archive. */
         static bool CheckArchive(string path)
 		{
-            bool result = false;
+            bool result;
             if (!File.Exists(path))
 			{
                 Console.WriteLine($"An archive was not found at path: {path}\nAn archive will be generated for you.");
@@ -265,7 +289,8 @@ namespace EversionPacker
 			{
 				try
 				{
-                    ArchiveHeader = ChaArchive.GetArchiveHeader(path);
+                    ArchiveHeader = ChaArchive.GetFromArchive(path, 0, 0x40);
+                    SpriteHeader = ChaArchive.GetFromArchive(path, 0x40, 0x10);
                     Console.WriteLine("Archive passed.");
                     result = true;
 				}
